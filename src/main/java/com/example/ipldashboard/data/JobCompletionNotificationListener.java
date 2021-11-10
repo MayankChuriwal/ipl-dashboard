@@ -28,40 +28,46 @@ public class JobCompletionNotificationListener extends JobExecutionListenerSuppo
         this.em = em;
     }
 
-  @Override
-  @Transactional
-  public void afterJob(JobExecution jobExecution) {
-    if(jobExecution.getStatus() == BatchStatus.COMPLETED) {
-      log.info("!!! JOB FINISHED! Time to verify the results");
-      
-      Map<String, Team> teamData = new HashMap<>();
-            
-      em.createQuery("select m.team1, count(*) from Match m group by m.team1", Object[].class)
-        .getResultList()
-        .stream()
-        .map(e -> new Team((String) e[0], (long) e[1]))
-        .forEach(team -> teamData.put(team.getTeamName(), team));
-    
-        em.createQuery("select m.team2, count(*) from Match m group by m.team2", Object[].class)
-        .getResultList()
-        .stream()
-        .forEach(e -> {
-            Team team = teamData.get((String) e[0]);
-            team.setTotalMatches(team.getTotalMatches() + (long) e[1]);
-        });
+    @Override
+    @Transactional
+    public void afterJob(JobExecution jobExecution) {
+        if(jobExecution.getStatus() == BatchStatus.COMPLETED) {
+            log.info("!!! JOB FINISHED! Time to verify the results");
+        
+            Map<String, Team> teamData = new HashMap<>();
+              
+            em.createQuery("select m.team1, count(*) from Match m group by m.team1", Object[].class)
+              .getResultList()
+              .stream()
+              .map(e -> new Team((String) e[0], (long) e[1]))
+              .forEach(team -> teamData.put(team.getTeamName(), team));
+        
+            em.createQuery("select m.team2, count(*) from Match m group by m.team2", Object[].class)
+            .getResultList()
+            .forEach(e -> {
+                String teamName = (String) e[0];
+                long totalMatches = (long) e[1];
+                Team team;
+                if (!teamData.containsKey(teamName)) {
+                    team = new Team(teamName, totalMatches);
+                    teamData.put(teamName, team);
+                } else {
+                    team = teamData.get(teamName);
+                    team.setTotalMatches(team.getTotalMatches() + totalMatches);
+                }
+            });
 
-        em.createQuery("select m.matchWinner, count(*) from Match m group by m.matchWinner", Object[].class)
-        .getResultList()
-        .stream()
-        .forEach(e -> {
-            Team team = teamData.get((String) e[0]);
-            if (team != null) {
-              team.setTotalWins((long) e[1]);
-            }
-        });
+            em.createQuery("select m.matchWinner, count(*) from Match m group by m.matchWinner", Object[].class)
+            .getResultList()
+            .forEach(e -> {
+                Team team = teamData.get((String) e[0]);
+                if (team != null) {
+                  team.setTotalWins((long) e[1]);
+                }
+            });
 
-        teamData.values().forEach(team -> em.persist(team));
-        teamData.values().forEach(team -> System.out.println(team));
+            teamData.values().forEach(team -> em.persist(team));
+            teamData.values().forEach(team -> System.out.println(team));
+        }
     }
-  }
 }
